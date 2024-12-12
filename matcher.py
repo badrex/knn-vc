@@ -14,8 +14,7 @@ from wavlm.WavLM import WavLM
 from knnvc_utils import generate_matrix_from_index
 
 
-SPEAKER_INFORMATION_LAYER = 12
-SPEAKER_INFORMATION_WEIGHTS = generate_matrix_from_index(SPEAKER_INFORMATION_LAYER)
+#SPEAKER_INFORMATION_LAYER = 12
 
 
 def fast_cosine_dist(source_feats: Tensor, matching_pool: Tensor, device: str = 'cpu') -> Tensor:
@@ -35,7 +34,8 @@ class KNeighborsVC(nn.Module):
         wavlm: WavLM,
         hifigan: HiFiGAN,
         hifigan_cfg: AttrDict,
-        device='cuda'
+        speaker_information_layer: int=6,
+        device='cuda',
     ) -> None:
         """ kNN-VC matcher. 
         Arguments:
@@ -45,7 +45,16 @@ class KNeighborsVC(nn.Module):
         """
         super().__init__()
         # set which features to extract from wavlm
-        self.weighting = torch.tensor(SPEAKER_INFORMATION_WEIGHTS, device=device)[:, None]
+        #self.speaker_information_layer = speaker_information_layer
+        
+        self.set_weights(speaker_information_layer)
+
+        # speaker_information_weights = generate_matrix_from_index(
+        #     self.speaker_information_layer
+        # )
+        # self.weighting = torch.tensor(
+        #     speaker_information_weights, device=device)[:, None]
+        
         # load hifigan
         self.hifigan = hifigan.eval()
         self.h = hifigan_cfg
@@ -55,15 +64,41 @@ class KNeighborsVC(nn.Module):
         self.sr = self.h.sampling_rate
         self.hop_length = 320
 
-    def get_matching_set(self, wavs: list[Path] | list[Tensor], weights=None, vad_trigger_level=7) -> Tensor:
+    def set_weights(self, speaker_information_layer: int=6):
+        self.speaker_information_layer = speaker_information_layer
+
+        speaker_information_weights = generate_matrix_from_index(
+            self.speaker_information_layer
+        )
+        self.weighting = torch.tensor(
+            speaker_information_weights, device=self.device)[:, None]
+        
+
+    def get_matching_set(self, 
+                         wavs: list[Path] | list[Tensor], 
+                         speaker_information_layer: int=6,
+                         weights=None, 
+                         vad_trigger_level=7) -> Tensor:
         """ Get concatenated wavlm features for the matching set using all waveforms in `wavs`, 
         specified as either a list of paths or list of loaded waveform tensors of 
         shape (channels, T), assumed to be of 16kHz sample rate.
         Optionally specify custom WavLM feature weighting with `weights`.
         """
+        # if speaker info layer changed since last set_weights call, update
+        if self.speaker_information_layer != speaker_information_layer: 
+            self.set_weights(speaker_information_layer)
+
         feats = []
-        for p in wavs:
-            feats.append(self.get_features(p, weights=self.weighting if weights is None else weights, vad_trigger_level=vad_trigger_level))
+
+        # for each waveform in wavs, extract features and concatenate
+        for _wav in wavs:
+            wav_features = self.get_features(
+                _wav, 
+                weights=self.weighting if weights is None else weights, 
+                speaker_information_layer=self.speaker_information_layer,
+                vad_trigger_level=vad_trigger_level
+            )
+            feats.append(wav_features)
         
         feats = torch.concat(feats, dim=0).cpu()
         return feats
@@ -78,12 +113,19 @@ class KNeighborsVC(nn.Module):
 
 
     @torch.inference_mode()
-    def get_features(self, path, weights=None, vad_trigger_level=0):
+    def get_features(self, 
+                     path,
+                     speaker_information_layer: int=6, 
+                     weights=None, 
+                     vad_trigger_level=0):
         """Returns features of `path` waveform as a tensor of shape (seq_len, dim), optionally perform VAD trimming
         on start/end with `vad_trigger_level`.
         """
+        # set weights
+        if self.speaker_information_layer != speaker_information_layer: 
+            self.set_weights(speaker_information_layer)
+
         # load audio
-        if weights == None: weights = self.weighting
         if type(path) in [str, Path]:
             x, sr = torchaudio.load(path, normalize=True)
         else:
@@ -113,8 +155,13 @@ class KNeighborsVC(nn.Module):
         # extract the representation of each layer
         wav_input_16khz = x.to(self.device)
         if torch.allclose(weights, self.weighting):
+
             # use fastpath
-            features = self.wavlm.extract_features(wav_input_16khz, output_layer=SPEAKER_INFORMATION_LAYER, ret_layer_results=False)[0]
+            features = self.wavlm.extract_features(
+                wav_input_16khz, 
+                output_layer=self.speaker_information_layer, 
+                ret_layer_results=False)[0]
+            
             features = features.squeeze(0)
         else:
             # use slower weighted
