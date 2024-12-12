@@ -121,8 +121,9 @@ class KNeighborsVC(nn.Module):
         on start/end with `vad_trigger_level`.
         """
         # set weights
-        if self.speaker_information_layer != speaker_information_layer: 
+        if weights == None:
             self.set_weights(speaker_information_layer)
+            weights = self.weighting
 
         # load audio
         if type(path) in [str, Path]:
