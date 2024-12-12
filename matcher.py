@@ -45,6 +45,7 @@ class KNeighborsVC(nn.Module):
         super().__init__()
         # set which features to extract from wavlm
         #self.speaker_information_layer = speaker_information_layer
+        self.device = torch.device(device)
         
         self.set_weights(speaker_information_layer)
 
@@ -59,7 +60,6 @@ class KNeighborsVC(nn.Module):
         self.h = hifigan_cfg
         # store wavlm
         self.wavlm = wavlm.eval()
-        self.device = torch.device(device)
         self.sr = self.h.sampling_rate
         self.hop_length = 320
 
