@@ -15,20 +15,18 @@ from hifigan.utils import AttrDict
 from matcher import KNeighborsVC
 
 
-def knn_vc(pretrained=True, 
-            progress=True, 
-            prematched=True,
-            speaker_information_layer=6, 
-            device='cuda') -> KNeighborsVC:
+def knn_vc(pretrained=True,
+           progress=True, 
+           prematched=True,
+           speaker_information_layer=6, 
+           device='cuda') -> KNeighborsVC:
     """ Load kNN-VC (WavLM encoder and HiFiGAN decoder). Optionally use vocoder trained on `prematched` data. """
     hifigan, hifigan_cfg = hifigan_wavlm(pretrained, progress, prematched, device)
     wavlm = wavlm_large(pretrained, progress, device)
-    knnvc = KNeighborsVC(
-        wavlm=wavlm, 
-        hifigan=hifigan, 
-        hifigan_cfg=hifigan_cfg,
-        speaker_information_layer=speaker_information_layer,
-        device=device)
+    knnvc = KNeighborsVC(wavlm=wavlm, 
+                         hifigan=hifigan, 
+                         hifigan_cfg=hifigan_cfg,                      speaker_information_layer=speaker_information_layer,                        device=device)
+    
     return knnvc
 
 

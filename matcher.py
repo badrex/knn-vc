@@ -31,12 +31,11 @@ def fast_cosine_dist(source_feats: Tensor, matching_pool: Tensor, device: str = 
 class KNeighborsVC(nn.Module):
 
     def __init__(self,
-        wavlm: WavLM,
-        hifigan: HiFiGAN,
-        hifigan_cfg: AttrDict,
-        speaker_information_layer: int=6,
-        device='cuda',
-    ) -> None:
+                 wavlm: WavLM,
+                 hifigan: HiFiGAN,
+                 hifigan_cfg: AttrDict,
+                 speaker_information_layer: int=6,
+                 device='cuda') -> None:
         """ kNN-VC matcher. 
         Arguments:
             - `wavlm` : trained WavLM model
